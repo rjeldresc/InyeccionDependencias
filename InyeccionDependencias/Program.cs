@@ -29,7 +29,7 @@ namespace InyeccionDependencias
                 .WriteTo.File("test.log")
                 .CreateLogger();
 
-            var hostBuilder = new HostBuilder();
+            HostBuilder hostBuilder = new();
 
             hostBuilder.ConfigureServices((context, services) => {
                 services.AddSingleton<ITtest, Test>();
@@ -59,7 +59,14 @@ namespace InyeccionDependencias
     interface ITtest
     {
         void Run(string message);
-        Task InvokeEndPointAsync(string endpoint);
+        Task InvokeEndpointAsync(EndpointType endpointType);
+    }
+
+    enum EndpointType
+    {
+        People,
+        Planets,
+        Films
     }
 
     class Test : ITtest
@@ -71,10 +78,25 @@ namespace InyeccionDependencias
             this.client = client;
         }
 
-        public async Task InvokeEndPointAsync(string endpoint)
+        public async Task InvokeEndpointAsync(EndpointType endpointType)
         {
+            var endpoint = endpointType switch
+            {
+                EndpointType.People => "api/people/1/",
+                EndpointType.Planets => "api/planets/1/",
+                EndpointType.Films => "api/films/1/",
+                _ => "unknown"
+            };
+
             var result = await client.GetAsync(endpoint);
-            Console.WriteLine(result.Content.ReadAsStringAsync());
+            var person = System.Text.Json.JsonSerializer.Deserialize<Person>(await result.Content.ReadAsStringAsync());
+            var (name, hair_color, eye_color, height) = person;
+            Console.WriteLine(name);
+            Console.WriteLine(hair_color);
+            Console.WriteLine(eye_color);
+            Console.WriteLine(height);
+
+            //Console.WriteLine(result.Content.ReadAsStringAsync());
         }
 
         public void Run(string message)
@@ -89,20 +111,23 @@ namespace InyeccionDependencias
         private readonly IConfiguration configuration;
         private readonly ILogger<MyService> logger;
 
+        public string ConfigurarionKey { get; init; }
+
         public MyService(ITtest test, IConfiguration configuration, ILogger<MyService> logger)
         {
             this.test = test;
             this.configuration = configuration;
             this.logger = logger;
+            ConfigurarionKey = "PROCESSOR_IDENTIFIER";
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             //throw new NotImplementedException();
             //var message = configuration.GetValue<string>("message");
-            var message = configuration.GetValue<string>("PROCESSOR_IDENTIFIER");
+            var message = configuration.GetValue<string>(ConfigurarionKey);
             logger.LogInformation($"Enviand {message}");
-            await test.InvokeEndPointAsync("/v2/pet/1");
+            await test.InvokeEndpointAsync(EndpointType.People);
             test.Run(message);
             //return Task.CompletedTask;
         }
@@ -113,4 +138,16 @@ namespace InyeccionDependencias
             return Task.CompletedTask;
         }
     }
+
+    record Person(string name, string hair_color, string eye_color, string height);
+
+    class Person2
+    {
+        public string name { get; set; }
+        public string hair_color { get; set; }
+        public string eye_color { get; set; }
+        public string height { get; set; }
+    }
+
+
 }
